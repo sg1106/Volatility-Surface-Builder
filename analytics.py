@@ -33,6 +33,7 @@ MAX_T_YEARS     = 2.0
 MIN_T_DAYS      = 3
 IV_RANGE        = (0.02, 3.0)
 ATM_TOLERANCE   = 0.03   # log-moneyness band considered "ATM"
+MAX_EXPIRATIONS = 10     # cap network round-trips per request (each is a separate Yahoo call)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -59,6 +60,9 @@ def fetch_option_chain(ticker: str):
     expirations = stock.options
     if not expirations:
         raise ValueError(f'No listed options chain found for "{ticker}".')
+    # yfinance returns expirations in chronological order; keep only the
+    # nearest N so one request doesn't make 15-20+ sequential Yahoo calls.
+    expirations = expirations[:MAX_EXPIRATIONS]
 
     rows = []
     for exp in expirations:
