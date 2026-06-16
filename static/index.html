@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Volatility Terrain Survey</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="contour-field" aria-hidden="true"></div>
+
+<div class="wrap">
+
+  <!-- ── Cartouche header ─────────────────────────────────────────── -->
+  <header class="cartouche">
+    <div class="cartouche__title">
+      <span class="cartouche__mark">⚓</span>
+      <div>
+        <h1>Volatility Terrain Survey</h1>
+        <p class="cartouche__sub">A chart of the implied&#8209;volatility surface, surveyed from the live options chain</p>
+      </div>
+    </div>
+
+    <form class="controls" id="controlsForm" autocomplete="off">
+      <label class="field">
+        <span>Ticker</span>
+        <input type="text" id="tickerInput" value="AAPL" maxlength="10" spellcheck="false">
+      </label>
+      <label class="field">
+        <span>Risk&#8209;free r</span>
+        <input type="number" id="rateInput" value="5.3" step="0.1" min="0" max="25">
+        <span class="field__suffix">%</span>
+      </label>
+      <label class="field">
+        <span>Dividend q</span>
+        <input type="number" id="divInput" value="0.5" step="0.1" min="0" max="25">
+        <span class="field__suffix">%</span>
+      </label>
+      <button type="submit" class="survey-btn" id="surveyBtn">
+        <span>Survey</span> <span class="survey-btn__glyph">▸</span>
+      </button>
+    </form>
+  </header>
+
+  <!-- ── Instrument readout strip ─────────────────────────────────── -->
+  <section class="readout" id="readout">
+    <div class="readout__item">
+      <span class="readout__label">Spot</span>
+      <span class="readout__value" id="roSpot">—</span>
+    </div>
+    <div class="readout__item">
+      <span class="readout__label">Contracts</span>
+      <span class="readout__value" id="roContracts">—</span>
+    </div>
+    <div class="readout__item">
+      <span class="readout__label">SVI slices</span>
+      <span class="readout__value" id="roSvi">—</span>
+    </div>
+    <div class="readout__item">
+      <span class="readout__label">Arb flags</span>
+      <span class="readout__value" id="roArb">—</span>
+    </div>
+    <div class="readout__item readout__item--right">
+      <span class="readout__label">Surveyed</span>
+      <span class="readout__value" id="roTime">—</span>
+    </div>
+  </section>
+
+  <!-- ── Status banners ───────────────────────────────────────────── -->
+  <div class="banner banner--error" id="errorBanner" hidden>
+    <strong>Survey failed.</strong> <span id="errorMessage"></span>
+  </div>
+  <div class="banner banner--notice" id="relaxNotice" hidden>
+    Liquidity filters relaxed — this chain had too few liquid contracts at default thresholds, so volume/open-interest screens were loosened to surface a usable surface.
+  </div>
+
+  <!-- ── Hero: 3D surface ──────────────────────────────────────────── -->
+  <section class="panel panel--hero">
+    <div class="panel__head">
+      <h2>Implied Volatility Surface</h2>
+      <span class="panel__meta">strike × maturity × IV — calls</span>
+    </div>
+    <div class="chart chart--hero" id="surface3d"></div>
+  </section>
+
+  <!-- ── Chart grid ────────────────────────────────────────────────── -->
+  <section class="grid3">
+    <article class="panel">
+      <div class="panel__head"><h2>Smile by Expiry</h2><span class="panel__meta">+ SVI fit</span></div>
+      <div class="chart" id="chartSmile"></div>
+    </article>
+    <article class="panel">
+      <div class="panel__head"><h2>IV vs Moneyness</h2><span class="panel__meta">all expiries</span></div>
+      <div class="chart" id="chartIvScatter"></div>
+    </article>
+    <article class="panel">
+      <div class="panel__head"><h2>Open Interest</h2><span class="panel__meta">by strike</span></div>
+      <div class="chart" id="chartOI"></div>
+    </article>
+
+    <article class="panel">
+      <div class="panel__head"><h2>Delta Δ</h2><span class="panel__meta">vs strike</span></div>
+      <div class="chart" id="chartDelta"></div>
+    </article>
+    <article class="panel">
+      <div class="panel__head"><h2>Gamma Γ</h2><span class="panel__meta">calls</span></div>
+      <div class="chart" id="chartGamma"></div>
+    </article>
+    <article class="panel">
+      <div class="panel__head"><h2>Vega ν</h2><span class="panel__meta">calls</span></div>
+      <div class="chart" id="chartVega"></div>
+    </article>
+
+    <article class="panel">
+      <div class="panel__head"><h2>ATM Term Structure</h2><span class="panel__meta">+ SVI</span></div>
+      <div class="chart" id="chartAtmTerm"></div>
+    </article>
+    <article class="panel">
+      <div class="panel__head"><h2>Theta Θ</h2><span class="panel__meta">per day</span></div>
+      <div class="chart" id="chartTheta"></div>
+    </article>
+    <article class="panel">
+      <div class="panel__head"><h2>Put&#8209;Call Parity</h2><span class="panel__meta">pricing error</span></div>
+      <div class="chart" id="chartPCP"></div>
+    </article>
+  </section>
+
+  <!-- ── Ship's log: data tables ──────────────────────────────────── -->
+  <section class="log">
+    <article class="panel panel--log">
+      <div class="panel__head"><h2>ATM Greeks</h2><span class="panel__meta">nearest&#8209;to&#8209;money call</span></div>
+      <table class="logtable" id="atmTable"><tbody></tbody></table>
+    </article>
+    <article class="panel panel--log">
+      <div class="panel__head"><h2>Run Statistics</h2><span class="panel__meta">fit diagnostics</span></div>
+      <table class="logtable" id="statsTable"><tbody></tbody></table>
+    </article>
+    <article class="panel panel--log">
+      <div class="panel__head"><h2>Arbitrage Flags</h2><span class="panel__meta">parity · butterfly · calendar</span></div>
+      <div id="arbList" class="arblist"></div>
+    </article>
+  </section>
+
+  <footer class="foot">
+    Computed locally with Black&#8209;Scholes, Newton&#8211;Raphson / Brent IV solving, and SVI surface fitting — Flask backend, no third&#8209;party data resale.
+  </footer>
+
+</div>
+
+<!-- ── Loading overlay ───────────────────────────────────────────────── -->
+<div class="sounding" id="loadingOverlay">
+  <div class="sounding__inner">
+    <div class="sounding__sweep" aria-hidden="true"></div>
+    <p class="sounding__text" id="loadingText">Casting the line…</p>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
